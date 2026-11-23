@@ -1332,12 +1332,27 @@ func (a *App) apiTypenschild(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 	out.Close()
-	text, err := TextErkennen(pfad)
-	if err != nil {
-		return nil, err
+	img, _ := os.ReadFile(pfad)
+	quelle := "Google"
+	text, gerr := GoogleTextErkennen(img)
+	if gerr != nil || strings.TrimSpace(text) == "" {
+		quelle = "Windows"
+		var werr error
+		text, werr = TextErkennen(pfad)
+		if werr != nil {
+			if gerr != nil {
+				return nil, errors.New("Google: " + gerr.Error() + " – " + werr.Error())
+			}
+			return nil, werr
+		}
 	}
 	if strings.TrimSpace(text) == "" {
 		return nil, errors.New("Im Foto wurde kein Text erkannt. Bitte näher, gerade und bei gutem Licht fotografieren.")
 	}
-	return TypenschildAuswerten(text), nil
+	t := TypenschildAuswerten(text)
+	t.Quelle = quelle
+	if gerr != nil {
+		t.Hinweis = "Google-Texterkennung nicht verfügbar (" + gerr.Error() + "), Windows-Texterkennung verwendet."
+	}
+	return t, nil
 }

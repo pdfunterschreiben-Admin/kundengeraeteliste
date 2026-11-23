@@ -681,6 +681,7 @@ async function geraetHinzufuegen() {
           const setze = (sp, v) => { if (!v) return false; const x = [...$$("[data-s]", s)].find((e) => gleich(e.dataset.s, sp)); if (x) { x.value = v; return true; } return false; };
           const gefunden = [setze("Typ", t.typ) && "Typ", setze("Seriennummer", t.sn) && "Seriennummer", setze("Hersteller", t.hersteller) && "Hersteller"].filter(Boolean);
           st.innerHTML = (gefunden.length ? `Übernommen: ${gefunden.join(", ")}. Bitte mit dem Typenschild vergleichen.` : "Es wurde nichts Passendes erkannt – bitte von Hand eintragen.")
+            + (t.quelle ? ` <small>(Texterkennung: ${esc(t.quelle)})</small>` : "") + (t.hinweis ? `<br><small>${esc(t.hinweis)}</small>` : "")
             + `<details style="margin-top:4px"><summary>Erkannter Text</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(t.text)}</pre></details>`;
         };
         $("#g-text", s).onclick = async () => {
@@ -700,7 +701,8 @@ async function geraetHinzufuegen() {
             const setze = (sp, v) => { if (!v) return false; const x = [...$$("[data-s]", s)].find((e) => gleich(e.dataset.s, sp)); if (x) { x.value = v; return true; } return false; };
             const gefunden = [setze("Typ", t.typ) && "Typ", setze("Seriennummer", t.sn) && "Seriennummer", setze("Hersteller", t.hersteller) && "Hersteller"].filter(Boolean);
             st.innerHTML = (gefunden.length ? `Übernommen: ${gefunden.join(", ")}. Bitte mit dem Typenschild vergleichen.` : "Es wurde nichts Passendes erkannt – bitte von Hand eintragen.")
-              + `<details style="margin-top:4px"><summary>Erkannter Text</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(t.text)}</pre></details>`;
+              + (t.quelle ? ` <small>(Texterkennung: ${esc(t.quelle)})</small>` : "") + (t.hinweis ? `<br><small>${esc(t.hinweis)}</small>` : "")
+            + `<details style="margin-top:4px"><summary>Erkannter Text</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(t.text)}</pre></details>`;
           } catch (e) { st.textContent = e.message; }
           datei.value = "";
         };

@@ -12,6 +12,8 @@ type Typenschild struct {
 	Hersteller string `json:"hersteller"`
 	Baujahr    string `json:"baujahr"`
 	Text       string `json:"text"`
+	Quelle     string `json:"quelle,omitempty"`
+	Hinweis    string `json:"hinweis,omitempty"`
 }
 
 var hersteller = []struct{ such, name string }{
