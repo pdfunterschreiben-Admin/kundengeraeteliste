@@ -197,7 +197,10 @@ async function listeOeffnen(id, reg = 0, markieren = null) {
   try {
     const j = await api("/api/liste?id=" + encodeURIComponent(id));
     const neu = !Z.liste || Z.liste.id !== id;
-    Z.liste = j.liste; Z.info = j.info; Z.betreff = j.betreff; Z.reportOrdner = j.reportOrdner;
+    Z.liste = j.liste;
+    Z.liste.register = Z.liste.register || [];
+    for (const r of Z.liste.register) { r.zeilen = r.zeilen || []; r.spalten = r.spalten || []; }
+    Z.info = j.info; Z.betreff = j.betreff; Z.reportOrdner = j.reportOrdner;
     Z.ansicht = "liste";
     if (neu) { Z.reg = 0; Z.filter = "alle"; Z.suche = ""; Z.sort = null; Z.reports = null; Z.reportsJ = null; Z.reportAuswahl.clear(); Z.reportFilter = ""; }
     Z.reg = reg === "reports" ? "reports" : Math.min(reg, Z.liste.register.length - 1);
