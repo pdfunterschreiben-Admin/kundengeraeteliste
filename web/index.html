@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Kundengeräteliste</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <aside id="seite">
+    <div class="marke" id="marke" title="Startseite" style="cursor:pointer">
+      <img src="icon.svg" alt="" width="34" height="34">
+      <div><strong>Kundengeräteliste</strong><span id="version"></span></div>
+    </div>
+    <nav>
+      <button class="nav" data-ansicht="uebersicht" id="nav-uebersicht">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z"/></svg>Fällige UVV
+        <span class="zahl rot" id="nav-faellig"></span>
+      </button>
+    </nav>
+    <div class="seite-kopf">
+      <span>Gerätelisten</span>
+      <button class="mini" id="btn-neu" title="Neue Geräteliste anlegen">+ Neu</button>
+    </div>
+    <input id="listen-suche" class="feld klein" placeholder="Kunde suchen …" autocomplete="off">
+    <div id="listen"></div>
+    <div class="seite-fuss">
+      <button class="nav" id="btn-import">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2Zm7-18-5.5 5.5 1.4 1.4L11 5.8V16h2V5.8l3.1 3.1 1.4-1.4L12 2Z"/></svg>Excel-Listen importieren</button>
+      <button class="nav" data-ansicht="einstellungen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7 7 0 0 0-1.7-1L15 3h-4l-.3 2.9a7 7 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7 7 0 0 0 1.7 1L11 21h4l.3-2.9a7 7 0 0 0 1.7-1l2.5 1 2-3.5-2.1-1.6ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>Einstellungen
+        <span class="zahl gelb" id="nav-update" hidden>Update</span></button>
+      <button class="nav" data-ansicht="hilfe">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 17h-2v-2h2v2Zm2.1-7.8-.9.9c-.7.7-1.2 1.3-1.2 2.9h-2v-.5c0-1.1.5-2.1 1.2-2.8l1.2-1.3a2 2 0 1 0-3.4-1.4H8a4 4 0 1 1 7.1 2.2Z"/></svg>Anleitung</button>
+    </div>
+  </aside>
+  <main id="haupt"></main>
+  <div id="wasserzeichen" aria-hidden="true"></div>
+</div>
+<div id="ablage" hidden><div><strong>Excel-Listen hier ablegen</strong><span>.xlsm oder .xlsx – sie werden als Gerätelisten übernommen</span></div></div>
+<div id="toasts" aria-live="polite"></div>
+<input type="file" id="datei-import" accept=".xlsm,.xlsx" multiple hidden>
+<input type="file" id="datei-einlesen" accept=".xlsm,.xlsx" hidden>
+<script src="app.js"></script>
+</body>
+</html>

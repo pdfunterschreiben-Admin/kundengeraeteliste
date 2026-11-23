@@ -1,0 +1,29 @@
+# Baut bei jedem Tag v* die Kundengeraeteliste.exe und haengt sie an ein GitHub-Release.
+# Testversion: Tag mit Bindestrich (z. B. v1.1.0-test1) -> wird als "Pre-release" veroeffentlicht
+# und nur an Rechner verteilt, bei denen "Testversionen erhalten" eingeschaltet ist.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Testen
+        run: go test ./...
+      - name: Bauen
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui -X main.Version=$V" -o Kundengeraeteliste.exe .
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Kundengeraeteliste.exe
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
