@@ -142,7 +142,14 @@ func (a *App) Beenden(neustart bool) {
 		a.sp.mu.Unlock()
 		var fehlerText []string
 		for _, id := range offen {
-			txt, err := a.Synchronisieren(id)
+			var txt string
+			var err error
+			if a.vorschauAn() {
+				// ohne Rueckfrage nichts uebernehmen: nur die eigene Liste senden
+				txt, err = a.Senden(id, "")
+			} else {
+				txt, _, err = a.Synchronisieren(id, "", false)
+			}
 			a.sp.mu.Lock()
 			titel := ""
 			if l := a.sp.Holen(id); l != nil {

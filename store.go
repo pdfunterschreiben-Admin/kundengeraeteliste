@@ -17,8 +17,11 @@ type Einstellungen struct {
 	ReportOrdner  string `json:"reportOrdner,omitempty"`
 	Testversionen bool   `json:"testversionen,omitempty"`
 	AutoSync      *bool  `json:"autoSync,omitempty"` // Abgleich beim Öffnen/Schließen (Standard an)
+	Vorschau      *bool  `json:"vorschau,omitempty"` // empfangene Aenderungen vor dem Uebernehmen anzeigen (Standard an)
 	Installiert   bool   `json:"installiert,omitempty"`
 }
+
+func (e Einstellungen) VorschauAn() bool { return e.Vorschau == nil || *e.Vorschau }
 
 func (e Einstellungen) AutoSyncAn() bool { return e.AutoSync == nil || *e.AutoSync }
 

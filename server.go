@@ -29,6 +29,7 @@ type App struct {
 	beenden   chan struct{}
 	gemeldet  map[string]bool
 	empfangen map[string]bool
+	offen     map[string]*Offen // abgeholte Aenderungen, die auf Bestaetigung warten
 	ende      sync.Once
 }
 
@@ -36,7 +37,7 @@ func NeueApp(sp *Speicher) *App {
 	b := make([]byte, 16)
 	rand.Read(b)
 	return &App{sp: sp, token: hex.EncodeToString(b), beenden: make(chan struct{}),
-		gemeldet: map[string]bool{}, empfangen: map[string]bool{}}
+		gemeldet: map[string]bool{}, empfangen: map[string]bool{}, offen: map[string]*Offen{}}
 }
 
 type apiFehler struct {
@@ -126,6 +127,7 @@ func (a *App) Handler() http.Handler {
 	api("/api/loeschen", a.apiLoeschen)
 	api("/api/sync", a.apiSync)
 	api("/api/empfangen", a.apiEmpfangen)
+	api("/api/uebernehmen", a.apiUebernehmen)
 	api("/api/protokoll", a.apiProtokoll)
 	api("/api/sicherungen", a.apiSicherungen)
 	api("/api/wiederherstellen", a.apiWiederherstellen)
@@ -151,7 +153,7 @@ func (a *App) apiStatus(r *http.Request) (interface{}, error) {
 	defer a.sp.mu.Unlock()
 	return map[string]interface{}{
 		"version": Version, "benutzer": BenutzerName(), "update": AktuellesUpdate(),
-		"einstellungen": a.sp.Einst, "autoSync": a.sp.Einst.AutoSyncAn(), "daten": a.sp.Basis,
+		"einstellungen": a.sp.Einst, "autoSync": a.sp.Einst.AutoSyncAn(), "vorschau": a.sp.Einst.VorschauAn(), "daten": a.sp.Basis,
 	}, nil
 }
 
@@ -159,6 +161,7 @@ func (a *App) apiEinstellungen(r *http.Request) (interface{}, error) {
 	var in struct {
 		ReportOrdner  *string `json:"reportOrdner"`
 		AutoSync      *bool   `json:"autoSync"`
+		Vorschau      *bool   `json:"vorschau"`
 		Testversionen *bool   `json:"testversionen"`
 	}
 	if err := lesen(r, &in); err != nil {
@@ -171,6 +174,9 @@ func (a *App) apiEinstellungen(r *http.Request) (interface{}, error) {
 	}
 	if in.AutoSync != nil {
 		a.sp.Einst.AutoSync = in.AutoSync
+	}
+	if in.Vorschau != nil {
+		a.sp.Einst.Vorschau = in.Vorschau
 	}
 	if in.Testversionen != nil {
 		a.sp.Einst.Testversionen = *in.Testversionen
@@ -626,11 +632,13 @@ func (a *App) apiListenEinst(r *http.Request) (interface{}, error) {
 		l.Untertitel = strings.TrimSpace(*in.Untertitel)
 	}
 	if in.Empfaenger != nil {
-		e := strings.TrimSpace(*in.Empfaenger)
-		if e != "" && !strings.Contains(e, "@") {
-			return nil, errors.New("Das ist keine gültige E-Mail-Adresse.")
+		adr := Adressen(*in.Empfaenger)
+		for _, x := range adr {
+			if !strings.Contains(x, "@") || strings.ContainsAny(x, " <>") {
+				return nil, errors.New("Das ist keine gültige E-Mail-Adresse: " + x)
+			}
 		}
-		l.Empfaenger = e
+		l.Empfaenger = strings.Join(adr, "; ")
 	}
 	if in.Betreff != nil {
 		l.Betreff = strings.TrimSpace(*in.Betreff)
@@ -676,7 +684,7 @@ func (a *App) apiNeu(r *http.Request) (interface{}, error) {
 			return nil, fmt.Errorf("Es gibt schon eine Liste „%s“.", t)
 		}
 	}
-	l := &Liste{Titel: t, Herkunft: "Vorlage", Zeit: map[string]float64{}, Empfaenger: strings.TrimSpace(in.Empfaenger)}
+	l := &Liste{Titel: t, Herkunft: "Vorlage", Zeit: map[string]float64{}, Empfaenger: strings.Join(Adressen(in.Empfaenger), "; ")}
 	namen := in.Register
 	if len(namen) == 0 {
 		namen = []string{"Geräteliste"}
@@ -926,7 +934,20 @@ func (a *App) dlExport(w http.ResponseWriter, r *http.Request) {
 // ---------- Abgleich ----------
 
 func (a *App) apiSync(r *http.Request) (interface{}, error) {
-	txt, err := a.Synchronisieren(r.URL.Query().Get("id"))
+	id := r.URL.Query().Get("id")
+	var in struct {
+		An        string `json:"an"`
+		NurSenden bool   `json:"nurSenden"`
+	}
+	_ = lesen(r, &in)
+	var txt string
+	var aend []Aenderung
+	var err error
+	if in.NurSenden {
+		txt, err = a.Senden(id, in.An)
+	} else {
+		txt, aend, err = a.Synchronisieren(id, in.An, a.vorschauAn())
+	}
 	if err != nil {
 		if txt != "" {
 			return nil, errors.New(txt + "\n\n" + err.Error())
@@ -935,11 +956,36 @@ func (a *App) apiSync(r *http.Request) (interface{}, error) {
 	}
 	a.sp.mu.Lock()
 	defer a.sp.mu.Unlock()
-	l := a.sp.Holen(r.URL.Query().Get("id"))
+	l := a.sp.Holen(id)
 	if l == nil {
 		return nil, fehler(404, "Liste nicht gefunden")
 	}
-	return map[string]interface{}{"text": txt, "info": info(l)}, nil
+	return map[string]interface{}{"text": txt, "info": info(l), "aenderungen": aend}, nil
+}
+
+// zurueckgehaltene Aenderungen uebernehmen (abgelehnte ausgenommen)
+func (a *App) apiUebernehmen(r *http.Request) (interface{}, error) {
+	id := r.URL.Query().Get("id")
+	var in struct {
+		Abgelehnt []string `json:"abgelehnt"`
+	}
+	if err := lesen(r, &in); err != nil {
+		return nil, err
+	}
+	sp := syncSperre(id)
+	sp.Lock()
+	defer sp.Unlock()
+	erg, err := a.Uebernehmen(id, in.Abgelehnt)
+	if err != nil {
+		return nil, err
+	}
+	a.sp.mu.Lock()
+	defer a.sp.mu.Unlock()
+	l := a.sp.Holen(id)
+	if l == nil {
+		return nil, fehler(404, "Liste nicht gefunden")
+	}
+	return map[string]interface{}{"text": erg.Text(), "info": info(l)}, nil
 }
 
 // beim Oeffnen einer Liste: neue Daten vom Kollegen holen (nur empfangen)
@@ -962,6 +1008,20 @@ func (a *App) apiEmpfangen(r *http.Request) (interface{}, error) {
 		return map[string]interface{}{"mails": 0}, nil
 	}
 	defer sp.Unlock()
+	if a.vorschauAn() {
+		aend, erg, n, err := a.Pruefen(id)
+		if err != nil {
+			return map[string]interface{}{"mails": 0, "hinweis": err.Error()}, nil
+		}
+		if len(aend) > 0 {
+			return map[string]interface{}{"mails": n, "aenderungen": aend}, nil
+		}
+		txt := ""
+		if erg.Geraete > 0 || erg.Neu > 0 {
+			txt = erg.Text()
+		}
+		return map[string]interface{}{"mails": n, "text": txt, "ergebnis": erg}, nil
+	}
 	erg, n, err := a.Empfangen(id, true)
 	if err != nil {
 		return map[string]interface{}{"mails": 0, "hinweis": err.Error()}, nil

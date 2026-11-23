@@ -217,6 +217,14 @@ async function automatischEmpfangen(id) {
   Z.empfangen = true; statusZeile();
   try {
     const j = await api("/api/empfangen?id=" + encodeURIComponent(id), {});
+    if (j.aenderungen && j.aenderungen.length) {
+      Z.empfangen = false; statusZeile();
+      const t = await aenderungenUebernehmen(l, j.aenderungen);
+      if (t) toast(t, "gut");
+      if (Z.liste && Z.liste.id === id) await listeOeffnen(id, Z.reg);
+      await listenLaden();
+      return;
+    }
     if (j.text) {
       toast(j.text, "gut");
       if (Z.liste && Z.liste.id === id) await listeOeffnen(id, Z.reg);
@@ -312,7 +320,7 @@ function listeZeichnen(h) {
       <div><h1><button id="titel" title="Listen-Einstellungen">${esc(l.titel)}</button></h1><div class="unterzeile" id="statuszeile"></div></div>
       <div class="aktionen">
         <button class="knopf" id="b-geraet"><svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>Gerät hinzufügen</button>
-        <button class="knopf primaer" id="b-sync" title="Neue Daten vom Kollegen holen und eigene Liste senden"><svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6a6 6 0 0 1 5.7 7.9l1.5 1.5A8 8 0 0 0 12 4Zm0 14a6 6 0 0 1-5.7-7.9L4.8 8.6A8 8 0 0 0 12 20v3l4-4-4-4v3Z"/></svg>Synchronisieren</button>
+        <button class="knopf primaer" id="b-sync" title="Neue Daten der Kollegen holen und eigene Liste senden"><svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6a6 6 0 0 1 5.7 7.9l1.5 1.5A8 8 0 0 0 12 4Zm0 14a6 6 0 0 1-5.7-7.9L4.8 8.6A8 8 0 0 0 12 20v3l4-4-4-4v3Z"/></svg>Synchronisieren</button>
         <button class="knopf" id="b-mehr" aria-label="Weitere Aktionen"><svg viewBox="0 0 24 24"><path d="M6 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg>Mehr</button>
       </div>
     </div>
@@ -696,7 +704,7 @@ async function listenEinstellungen() {
   const l = Z.liste;
   const r = await dialog({ titel: "Listen-Einstellungen", html: `
     <label>Titel</label><input class="feld" id="e-titel" value="${esc(l.titel)}">
-    <label>E-Mail des Kollegen für den Abgleich <small>(wie Zelle I3 in Excel)</small></label><input class="feld" id="e-empf" value="${esc(l.empfaenger || "")}" placeholder="v.nachname@schlueter-gabelstapler.de">
+    <label>E-Mail-Adressen der Kollegen für den Abgleich <small>(wie Zelle I3 in Excel; mehrere mit Semikolon oder je eine pro Zeile)</small></label><textarea class="feld" id="e-empf" rows="3" placeholder="v.nachname@schlueter-gabelstapler.de">${esc((l.empfaenger || "").split(/[;,]\s*/).join("\n"))}</textarea>
     <label>Betreff der Abgleich-Mails <small>(muss beim Kollegen gleich sein)</small></label><input class="feld" id="e-betreff" value="${esc(Z.betreff)}">
     <p style="font-size:12.5px;margin-top:8px">Der Betreff kommt aus der importierten Excel-Liste. Nur ändern, wenn der Kollege ihn auch ändert – sonst finden sich die Mails nicht mehr.</p>`,
     knoepfe: [{ text: "Abbrechen", wert: null }, { text: "Speichern", art: "primaer", wert: (s) => ({ titel: $("#e-titel", s).value, empfaenger: $("#e-empf", s).value, betreff: $("#e-betreff", s).value }) }] });
@@ -709,19 +717,77 @@ async function listenEinstellungen() {
   } catch (e) { fehlerToast(e); }
 }
 
+function adressenZerlegen(s) { return (s || "").split(/[;,\n\r]+/).map((x) => x.trim()).filter(Boolean); }
+
+// Welche Kollegen sollen die Liste bekommen? (nur nötig, wenn mehrere hinterlegt sind)
+async function empfaengerWaehlen(l) {
+  const alle = adressenZerlegen(l.empfaenger);
+  if (alle.length <= 1) return alle.join("; ");
+  const r = await dialog({ titel: "Mit wem abgleichen?", html: `
+    <p>Die Liste wird an die ausgewählten Kollegen gesendet. Neue Daten von allen Kollegen werden in jedem Fall geholt.</p>
+    <div class="auswahl">${alle.map((x, i) => `<label class="schalter"><input type="checkbox" data-a="${esc(x)}" checked><span>${esc(x)}</span></label>`).join("")}</div>
+    <label>Weiterer Kollege (nur dieses Mal) <small>optional</small></label><input class="feld" id="s-extra" placeholder="v.nachname@schlueter-gabelstapler.de">`,
+    knoepfe: [{ text: "Abbrechen", wert: null }, { text: "Synchronisieren", art: "primaer", wert: (s) => {
+      const an = [...s.querySelectorAll("input[data-a]:checked")].map((c) => c.dataset.a).concat(adressenZerlegen($("#s-extra", s).value));
+      if (!an.length) { toast("Bitte mindestens einen Kollegen auswählen.", "fehler"); return undefined; }
+      return an.join("; ");
+    } }] });
+  return r;
+}
+
+// Vorschau: was hat der Kollege geändert? Gibt die abgelehnten IDs zurück (oder null bei Abbruch)
+async function aenderungenPruefen(aend) {
+  const grup = new Map();
+  aend.forEach((x, i) => { const k = x.von; if (!grup.has(k)) grup.set(k, []); grup.get(k).push([i, x]); });
+  const geraet = (x) => [x.nummer, x.typ, x.sn && "SN " + x.sn].filter(Boolean).join(" · ") || "(ohne Angaben)";
+  const html = `<p>Diese Änderungen wurden von Kollegen geschickt. Entferne den Haken bei dem, was <b>nicht</b> übernommen werden soll. Deine Liste wird vorher gesichert.</p>
+    <label class="schalter" style="margin:0 0 8px"><input type="checkbox" id="v-alle" checked><span><b>Alle ${aend.length} Änderung(en) übernehmen</b></span></label>
+    ${[...grup].map(([von, liste]) => `<h3 style="font-size:14px;margin:14px 0 6px">Von ${esc(von)}</h3>
+      <table class="einfach vorschau"><thead><tr><th></th><th>Gerät</th><th>Feld</th><th>Bisher</th><th>Neu</th></tr></thead><tbody>
+      ${liste.map(([i, x]) => `<tr><td><input type="checkbox" data-i="${i}" checked></td><td>${esc(geraet(x))}${x.register ? `<br><small>${esc(x.register)}</small>` : ""}</td>
+        <td>${x.neuesGeraet ? "<b>Neues Gerät</b>" : esc(x.spalte)}</td><td class="alt">${esc(x.alt || "–")}</td><td class="neu">${x.neuesGeraet ? "wird hinzugefügt" : esc(x.neu || "(leer)")}</td></tr>`).join("")}
+      </tbody></table>`).join("")}`;
+  return dialog({ titel: "Änderungen der Kollegen prüfen", html, breit: true,
+    beimOeffnen: (s) => {
+      const einzeln = () => [...s.querySelectorAll("input[data-i]")];
+      $("#v-alle", s).onchange = (e) => einzeln().forEach((c) => (c.checked = e.target.checked));
+      s.addEventListener("change", (e) => { if (e.target.dataset && e.target.dataset.i !== undefined) $("#v-alle", s).checked = einzeln().every((c) => c.checked); });
+    },
+    knoepfe: [{ text: "Später entscheiden", wert: null }, { text: "Ausgewählte übernehmen", art: "primaer", wert: (s) => [...s.querySelectorAll("input[data-i]")].filter((c) => !c.checked).map((c) => aend[+c.dataset.i].id) }] });
+}
+
+async function aenderungenUebernehmen(l, aend) {
+  const abgelehnt = await aenderungenPruefen(aend);
+  if (abgelehnt === null) return false;
+  const j = await api(`/api/uebernehmen?id=${l.id}`, { abgelehnt });
+  Z.info = j.info;
+  return j.text;
+}
+
 async function synchronisieren(btn) {
   const l = Z.liste;
   if (!l.empfaenger) {
-    const e = await dialog({ titel: "Abgleich einrichten", html: `<p>An welche E-Mail-Adresse soll die Liste gesendet werden? Die Adresse kannst du später in den Listen-Einstellungen ändern.</p><label>E-Mail des Kollegen</label><input class="feld" id="se" placeholder="v.nachname@schlueter-gabelstapler.de">`,
+    const e = await dialog({ titel: "Abgleich einrichten", html: `<p>An welche E-Mail-Adresse(n) soll die Liste gesendet werden? Mehrere Kollegen kannst du mit Semikolon trennen. Die Adressen kannst du später in den Listen-Einstellungen ändern.</p><label>E-Mail-Adresse(n) der Kollegen</label><input class="feld" id="se" placeholder="v.nachname@schlueter-gabelstapler.de">`,
       knoepfe: [{ text: "Abbrechen", wert: null }, { text: "Speichern und synchronisieren", art: "primaer", wert: (s) => $("#se", s).value }] });
     if (!e) return;
-    try { await api(`/api/listeneinstellungen?id=${l.id}`, { empfaenger: e }); l.empfaenger = e.trim(); } catch (er) { return fehlerToast(er); }
+    try { await api(`/api/listeneinstellungen?id=${l.id}`, { empfaenger: e }); l.empfaenger = adressenZerlegen(e).join("; "); } catch (er) { return fehlerToast(er); }
   }
+  const an = await empfaengerWaehlen(l);
+  if (!an) return;
   knopfLaedt(btn, true, "Synchronisiere …");
   try {
-    const j = await api(`/api/sync?id=${l.id}`, {});
+    let j = await api(`/api/sync?id=${l.id}`, { an });
+    let text = j.text;
+    if (j.aenderungen && j.aenderungen.length) {
+      knopfLaedt(btn, false);
+      const t = await aenderungenUebernehmen(l, j.aenderungen);
+      if (t === false) return;
+      knopfLaedt(btn, true, "Sende …");
+      j = await api(`/api/sync?id=${l.id}`, { an, nurSenden: true });
+      text = t + "\n" + j.text;
+    }
     l.syncOffen = false; Z.info = j.info;
-    await hinweis("Synchronisieren", j.text);
+    await hinweis("Synchronisieren", text);
     await listeOeffnen(l.id, Z.reg); await listenLaden();
   } catch (e) { await hinweis("Synchronisieren", e.message); }
   knopfLaedt(btn, false);
@@ -970,7 +1036,8 @@ function einstellungenZeichnen(h) {
     <div class="karte"><h3>Truck-Reports</h3><p>Ordner, in dem die Truck-Reports liegen (mit Unterordnern). Pro Geräteliste werden die Reports über die Seriennummer zugeordnet.</p>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pfad">${esc(s.einstellungen.reportOrdner || "noch kein Ordner gewählt")}</span><button class="knopf" id="e-ro">Ordner auswählen</button></div></div>
     <div class="karte"><h3>Abgleich mit Kollegen</h3>
-      <label class="schalter"><input type="checkbox" id="e-auto" ${s.autoSync ? "checked" : ""}><span><b>Automatisch abgleichen</b><br><span style="color:var(--leise)">Beim Öffnen einer Liste werden neue Daten vom Kollegen übernommen, beim Schließen des Programms werden geänderte Listen gesendet – wie bei der Excel-Liste. Braucht das klassische Outlook.</span></span></label></div>
+      <label class="schalter"><input type="checkbox" id="e-auto" ${s.autoSync ? "checked" : ""}><span><b>Automatisch abgleichen</b><br><span style="color:var(--leise)">Beim Öffnen einer Liste werden neue Daten vom Kollegen übernommen, beim Schließen des Programms werden geänderte Listen gesendet – wie bei der Excel-Liste. Braucht das klassische Outlook.</span></span></label>
+      <label class="schalter" style="margin-top:12px"><input type="checkbox" id="e-vorschau" ${s.vorschau ? "checked" : ""}><span><b>Änderungen vor dem Übernehmen anzeigen</b><br><span style="color:var(--leise)">Du siehst, was Kollegen geändert haben (bisher → neu), und kannst einzelne Änderungen ablehnen. Beim Schließen wird dann nur gesendet, nichts übernommen.</span></span></label></div>
     <div class="karte"><h3>Updates</h3><p>${u.verfuegbar ? `Version ${esc(u.version)} ist verfügbar.` : u.fehler ? esc(u.fehler) : "Das Programm ist aktuell."}${u.geprueft ? ` Zuletzt geprüft: ${esc(u.geprueft)}.` : ""}</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">${u.verfuegbar ? '<button class="knopf primaer" id="e-upd">Jetzt aktualisieren</button>' : ""}<button class="knopf" id="e-pruef">Nach Updates suchen</button></div>
       <label class="schalter" style="margin-top:12px"><input type="checkbox" id="e-test" ${s.einstellungen.testversionen ? "checked" : ""}><span>Testversionen erhalten <span style="color:var(--leise)">(nur zum Ausprobieren neuer Funktionen)</span></span></label></div>
@@ -982,6 +1049,7 @@ function einstellungenZeichnen(h) {
   updateBandVerbinden(h);
   $("#e-ro").onclick = () => reportOrdnerWaehlen(true);
   $("#e-auto").onchange = async (e) => { try { await api("/api/einstellungen", { autoSync: e.target.checked }); await statusLaden(); } catch (er) { fehlerToast(er); } };
+  $("#e-vorschau").onchange = async (e) => { try { await api("/api/einstellungen", { vorschau: e.target.checked }); await statusLaden(); } catch (er) { fehlerToast(er); } };
   $("#e-test").onchange = async (e) => { try { await api("/api/einstellungen", { testversionen: e.target.checked }); await api("/api/update?aktion=pruefen"); await statusLaden(); zeichnen(); } catch (er) { fehlerToast(er); } };
   $("#e-pruef").onclick = async (e) => { knopfLaedt(e.currentTarget, true, "Prüfe …"); try { await api("/api/update?aktion=pruefen"); await statusLaden(); zeichnen(); } catch (er) { fehlerToast(er); knopfLaedt(e.currentTarget, false); } };
   $("#e-upd") && ($("#e-upd").onclick = (e) => updateInstallieren(e.currentTarget));

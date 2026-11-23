@@ -271,3 +271,11 @@ kbd { background: #fff; border: 1px solid var(--linie); border-bottom-width: 2px
 #wasserzeichen { position: fixed; left: calc(134px + 50vw); top: 56%; width: min(760px, 52vw); aspect-ratio: 803/150; transform: translate(-50%, -50%); background: url("wasserzeichen.png") center/contain no-repeat; opacity: .07; pointer-events: none; z-index: 0; }
 @media print { #wasserzeichen { display: none; } }
 @media (max-width: 900px) { #wasserzeichen { left: 50vw; } }
+
+/* Sync: Auswahl und Vorschau */
+.dialog .auswahl { display: grid; gap: 4px; margin: 4px 0 6px; }
+.dialog .auswahl .schalter { margin: 0; font-weight: 400; }
+table.vorschau { width: 100%; font-size: 13px; }
+table.vorschau td, table.vorschau th { padding: 6px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--linie); }
+table.vorschau td.alt { color: var(--leise); text-decoration: line-through; text-decoration-color: rgba(200,16,46,.5); }
+table.vorschau td.neu { font-weight: 600; color: #1d6b3a; }

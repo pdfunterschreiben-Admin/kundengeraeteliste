@@ -63,3 +63,41 @@ func TestEingabe(t *testing.T) {
 		if w.T+w.V != c[2] { t.Errorf("%v -> %v", c, w) }
 	}
 }
+
+func TestAbgleichAuswahl(t *testing.T) {
+	ich := claas(t)
+	kollege := claas(t)
+	r := kollege.Register[0]
+	z := r.Zeilen[0]
+	r.Zeilen[0].Werte[r.Spalte(spStunden)] = Wert{T: "s", V: "300h"}
+	kollege.ZeitSetzen(r, z, spStunden, Jetzt())
+	r.Zeilen = append(r.Zeilen, &Zeile{ID: "x", Werte: []Wert{{T: "s", V: "NEU-1"}, {T: "s", V: "8FBE15T"}, {T: "n", V: "99999"}, {}, {}, {T: "d", V: "2026-01-01"}, {}, {}, {}, {}}})
+	x, _ := ListeAlsXlsx(kollege, true)
+	m, _ := MappeLesen(x)
+	ein, _ := ListeAusMappe(m)
+
+	vorher := len(ich.Register[0].Zeilen)
+	k, err := kopieren(ich)
+	if err != nil { t.Fatal(err) }
+	op := &AbgleichOpt{Praefix: "m0|"}
+	Abgleichen(k, ein, "Kollege", op)
+	if len(op.Liste) != 2 { t.Fatalf("Vorschau: %d Aenderungen", len(op.Liste)) }
+	if len(ich.Register[0].Zeilen) != vorher { t.Fatalf("Vorschau hat die Liste veraendert") }
+
+	// Stunden ablehnen, neues Geraet uebernehmen
+	abg := map[string]bool{}
+	for _, a := range op.Liste { if !a.NeuesGeraet { abg[a.ID] = true } }
+	Abgleichen(ich, ein, "Kollege", &AbgleichOpt{Praefix: "m0|", Abgelehnt: abg})
+	g := ich.Register[0]
+	if len(g.Zeilen) != vorher+1 { t.Errorf("neues Geraet fehlt") }
+	if v := g.Wert(g.Zeilen[0], spStunden).V; v == "300h" { t.Errorf("abgelehnte Aenderung uebernommen") }
+	// beim naechsten Mal wird die abgelehnte Aenderung nicht erneut angeboten
+	op2 := &AbgleichOpt{Praefix: "m0|"}
+	Abgleichen(ich, ein, "Kollege", op2)
+	if len(op2.Liste) != 0 { t.Errorf("abgelehnte Aenderung wieder angeboten: %+v", op2.Liste) }
+}
+
+func TestAdressen(t *testing.T) {
+	a := Adressen("a@x.de; b@x.de,\nA@x.de ")
+	if len(a) != 2 || a[1] != "b@x.de" { t.Errorf("%v", a) }
+}
