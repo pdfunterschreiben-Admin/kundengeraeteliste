@@ -1337,7 +1337,6 @@ func (a *App) apiTypenschild(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 	quelle := "Windows"
-	}
 	if strings.TrimSpace(text) == "" {
 		return nil, errors.New("Im Foto wurde kein Text erkannt. Bitte näher, gerade und bei gutem Licht fotografieren.")
 	}
