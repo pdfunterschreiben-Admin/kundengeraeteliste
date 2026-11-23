@@ -49,3 +49,5 @@ func OutlookEntwurf(an, betreff, text string, anh []string) error { return errNu
 func InstallOrdner() string                                       { h, _ := os.UserHomeDir(); return filepath.Join(h, ".local", "kgl") }
 func Verknuepfungen(exe string) error                             { return nil }
 func NeuStarten(exe string, args ...string) error                 { return exec.Command(exe, args...).Start() }
+
+func SymbolAktualisieren() {}

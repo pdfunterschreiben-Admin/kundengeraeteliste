@@ -397,6 +397,21 @@ func InstallOrdner() string {
 }
 
 func Verknuepfungen(exe string) error {
+	symbol := exe
+	if ico, err := webDateien.ReadFile("web/Kundengeraeteliste.ico"); err == nil {
+		ordner := filepath.Dir(exe)
+		pfad := filepath.Join(ordner, "symbol-"+Version+".ico")
+		if os.WriteFile(pfad, ico, 0o644) == nil {
+			symbol = pfad
+			files, _ := filepath.Glob(filepath.Join(ordner, "symbol-*.ico"))
+			for _, f := range files {
+				if f != pfad {
+					os.Remove(f)
+				}
+			}
+		}
+	}
+	defer symbolCacheLeeren()
 	return ComAusfuehren(func() error {
 		sh, err := ComErstellen("WScript.Shell")
 		if err != nil {
@@ -419,7 +434,7 @@ func Verknuepfungen(exe string) error {
 			}
 			_ = lnk.Put("TargetPath", exe)
 			_ = lnk.Put("WorkingDirectory", filepath.Dir(exe))
-			_ = lnk.Put("IconLocation", exe+",0")
+			_ = lnk.Put("IconLocation", symbol+",0")
 			_ = lnk.Put("Description", "Kundengeräteliste – Gerätelisten und UVV-Termine")
 			_ = lnk.Call("Save")
 			lnk.Release()
@@ -430,4 +445,22 @@ func Verknuepfungen(exe string) error {
 
 func NeuStarten(exe string, args ...string) error {
 	return exec.Command(exe, args...).Start()
+}
+
+// Windows soll die Symbole der Verknüpfungen neu laden (SHCNE_ASSOCCHANGED).
+func symbolCacheLeeren() {
+	syscall.NewLazyDLL("shell32.dll").NewProc("SHChangeNotify").Call(0x08000000, 0, 0, 0)
+}
+
+// Bei jedem Start der installierten Version: Verknüpfungen und Symbol auffrischen.
+func SymbolAktualisieren() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	marke := filepath.Join(filepath.Dir(exe), "symbol-"+Version+".ico")
+	if _, err := os.Stat(marke); err == nil {
+		return
+	}
+	_ = Verknuepfungen(exe)
 }

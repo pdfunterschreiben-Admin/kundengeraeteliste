@@ -31,6 +31,7 @@ func main() {
 		if installieren() {
 			return
 		}
+		SymbolAktualisieren()
 	}
 
 	einzel := EinzelInstanz()
