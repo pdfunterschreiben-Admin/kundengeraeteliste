@@ -4,36 +4,23 @@
       <stop offset="0" stop-color="#e3172d"/><stop offset="1" stop-color="#b30c1f"/>
     </linearGradient>
   </defs>
+  <!-- Grundform wie das Truck-Report-Symbol -->
   <rect x="8" y="8" width="240" height="240" rx="50" fill="url(#g)"/>
   <!-- Klemmbrett -->
-  <rect x="50" y="44" width="138" height="176" rx="16" fill="#fff"/>
-  <rect x="88" y="30" width="62" height="30" rx="10" fill="#fff"/>
-  <rect x="103" y="39" width="32" height="9" rx="4.5" fill="#c4101f"/>
-  <!-- Geraete-Zeilen mit Haken -->
+  <rect x="50" y="46" width="156" height="178" rx="18" fill="#fff"/>
+  <rect x="94" y="28" width="68" height="34" rx="11" fill="#fff"/>
+  <rect x="110" y="39" width="36" height="10" rx="5" fill="#c4101f"/>
+  <!-- Gabelstapler -->
   <g fill="#c4101f">
-    <rect x="68" y="78" width="24" height="24" rx="6"/>
-    <rect x="68" y="116" width="24" height="24" rx="6"/>
-    <rect x="68" y="154" width="24" height="24" rx="6"/>
+    <rect x="72" y="118" width="70" height="30" rx="7"/>
+    <rect x="150" y="70" width="10" height="84" rx="2.5"/>
+    <rect x="150" y="144" width="42" height="9" rx="2.5"/>
+    <rect x="142" y="124" width="10" height="9" rx="1.5"/>
   </g>
-  <g fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M74 90 l5 5 l8 -10"/>
-    <path d="M74 128 l5 5 l8 -10"/>
-  </g>
-  <g fill="#f2b8c0">
-    <rect x="102" y="80" width="68" height="9" rx="4.5"/>
-    <rect x="102" y="93" width="44" height="7" rx="3.5"/>
-    <rect x="102" y="118" width="68" height="9" rx="4.5"/>
-    <rect x="102" y="131" width="44" height="7" rx="3.5"/>
-    <rect x="102" y="156" width="40" height="9" rx="4.5"/>
-  </g>
-  <!-- Pruefplakette mit Gabelstapler -->
-  <circle cx="184" cy="188" r="46" fill="#1e2228" stroke="#fff" stroke-width="8"/>
-  <g fill="#fff">
-    <rect x="152" y="180" width="34" height="18" rx="4"/>
-    <rect x="192" y="156" width="6" height="46" rx="1.5"/>
-    <rect x="192" y="198" width="24" height="5" rx="1.5"/>
-  </g>
-  <path d="M158 181 V166 h20 l6 14" fill="none" stroke="#fff" stroke-width="5" stroke-linejoin="round"/>
-  <circle cx="161" cy="203" r="7" fill="#fff"/><circle cx="161" cy="203" r="2.6" fill="#1e2228"/>
-  <circle cx="180" cy="203" r="7" fill="#fff"/><circle cx="180" cy="203" r="2.6" fill="#1e2228"/>
+  <path d="M84 119 V88 q0-5 5-5 h29 q4 0 5 4 l10 32" fill="none" stroke="#c4101f" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="88" cy="153" r="12" fill="#c4101f"/><circle cx="88" cy="153" r="4.5" fill="#fff"/>
+  <circle cx="128" cy="153" r="12" fill="#c4101f"/><circle cx="128" cy="153" r="4.5" fill="#fff"/>
+  <!-- Listenzeilen -->
+  <rect x="72" y="180" width="112" height="10" rx="5" fill="#c4101f" opacity=".85"/>
+  <rect x="72" y="198" width="76" height="10" rx="5" fill="#c4101f" opacity=".4"/>
 </svg>
