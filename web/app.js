@@ -618,8 +618,21 @@ async function geraetDetails(z) {
         if (!j.ordner) { ziel.innerHTML = "<p>Es ist noch kein Report-Ordner gewählt (Reiter „Truck-Reports“).</p>"; return; }
         const mit = j.reports.filter((r) => r.geraete.some((g) => (g.sn || "").replace(/\s/g, "").toUpperCase() === sn)).slice(0, 5);
         if (!mit.length) { ziel.innerHTML = "<p>Zu dieser Seriennummer wurde im Report-Ordner nichts gefunden.</p>"; return; }
-        ziel.innerHTML = `<table class="einfach"><tbody>${mit.map((r, i) => `<tr><td>${esc(r.datum)}</td><td>${esc(r.name)}</td><td style="text-align:right"><button class="knopf" data-o="${i}">Öffnen</button></td></tr>`).join("")}</tbody></table>`;
-        ziel.onclick = (e) => { const b = e.target.closest("button[data-o]"); if (b) reportAktion("oeffnen", [mit[+b.dataset.o].pfad]); };
+        const stdIdx = reg.spalten.findIndex((x) => gleich(x, "Betriebsstunden"));
+        ziel.innerHTML = `<table class="einfach"><tbody>${mit.map((r, i) => `<tr><td>${esc(r.datum)}</td><td>${esc(r.name)}</td><td style="text-align:right;white-space:nowrap">${stdIdx >= 0 ? `<button class="knopf" data-h="${i}">Betriebsstunden übernehmen</button> ` : ""}<button class="knopf" data-o="${i}">Öffnen</button></td></tr>`).join("")}</tbody></table>`;
+        ziel.onclick = async (e) => {
+          const b = e.target.closest("button[data-o]"); if (b) return reportAktion("oeffnen", [mit[+b.dataset.o].pfad]);
+          const h = e.target.closest("button[data-h]"); if (!h) return;
+          try {
+            const t = await api("/api/reportgeraet", { liste: l.id, pfad: mit[+h.dataset.h].pfad });
+            if (!t.stunden) return toast("In diesem Report wurden keine Betriebsstunden gefunden.", "fehler");
+            const alt = anzeige("Betriebsstunden", wert(reg, z, "Betriebsstunden"));
+            if (!(await frage("Betriebsstunden übernehmen?", `Bisher: ${alt || "–"}\nAus dem Report: ${t.stunden}`, "Übernehmen"))) return;
+            const j = await api(`/api/zelle?id=${l.id}`, { register: regIdx, zeile: z.id, spalte: stdIdx, text: t.stunden });
+            Object.assign(z, j.zeile); Z.info = j.info; l.syncOffen = true;
+            toast("Betriebsstunden übernommen.", "gut"); if (Z.ansicht === "liste") tabelleZeichnen();
+          } catch (er) { fehlerToast(er); }
+        };
       } catch (e) { ziel.innerHTML = `<p>${esc(e.message)}</p>`; }
     } });
 }
@@ -668,8 +681,8 @@ async function geraetHinzufuegen() {
   const l = Z.liste, reg = l.register[Z.reg];
   const felder = reg.spalten.filter((s) => !istFormel(s));
   const html = `<p>Pflicht ist nur die Seriennummer – daran wird das Gerät beim Abgleich erkannt. Datumsfelder als MM/JJJJ eingeben.</p>
-    <div class="foto-zeile"><button type="button" class="knopf" id="g-foto">Foto vom Typenschild …</button><button type="button" class="knopf" id="g-text">Erkannten Text einfügen …</button><input type="file" id="g-foto-datei" accept="image/*" hidden>
-      <span id="g-foto-status" style="color:var(--leise);font-size:12.5px">Typ und Seriennummer werden aus dem Foto vorbelegt – bitte kurz prüfen.</span></div>
+    <div class="foto-zeile"><button type="button" class="knopf" id="g-foto">Foto vom Typenschild …</button><button type="button" class="knopf" id="g-text">Erkannten Text einfügen …</button><button type="button" class="knopf" id="g-report">Aus Truck-Report …</button><input type="file" id="g-foto-datei" accept="image/*" hidden><input type="file" id="g-report-datei" hidden>
+      <span id="g-foto-status" style="color:var(--leise);font-size:12.5px">Typ, Seriennummer usw. aus Foto, Lens-Text oder Truck-Report vorbelegen – bitte kurz prüfen.</span></div>
     <div class="zeile2">${felder.map((s) => `<div ${zellKlasse(s) === "breit" ? 'style="grid-column:1/-1"' : ""}><label>${esc(s)}${gleich(s, "Seriennummer") ? " *" : ""}</label>
       ${zellKlasse(s) === "breit" ? `<textarea class="feld" data-s="${esc(s)}" rows="2"></textarea>` : `<input class="feld" data-s="${esc(s)}" ${istDatumSpalte(s) ? 'placeholder="MM/JJJJ"' : ""}>`}</div>`).join("")}</div>`;
   while (true) {
@@ -683,6 +696,21 @@ async function geraetHinzufuegen() {
           st.innerHTML = (gefunden.length ? `Übernommen: ${gefunden.join(", ")}. Bitte mit dem Typenschild vergleichen.` : "Es wurde nichts Passendes erkannt – bitte von Hand eintragen.")
             + (t.quelle ? ` <small>(Texterkennung: ${esc(t.quelle)})</small>` : "") + (t.hinweis ? `<br><small>${esc(t.hinweis)}</small>` : "")
             + `<details style="margin-top:4px"><summary>Erkannter Text</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(t.text)}</pre></details>`;
+        };
+        const rdatei = $("#g-report-datei", s);
+        $("#g-report", s).onclick = () => rdatei.click();
+        rdatei.onchange = async () => {
+          const f = rdatei.files[0]; if (!f) return;
+          st.innerHTML = '<span class="status-punkt"><span class="dreh"></span>Report wird gelesen …</span>';
+          try {
+            const fd = new FormData(); fd.append("datei", f);
+            const t = await api("/api/reportgeraet", fd);
+            const setze = (sp, v) => { if (!v) return false; const x = [...$$("[data-s]", s)].find((e) => gleich(e.dataset.s, sp)); if (x && !x.value.trim()) { x.value = v; return true; } return false; };
+            const gefunden = [setze("Nummer", t.nummer) && "Nummer", setze("Typ", t.typ) && "Typ", setze("Seriennummer", t.sn) && "Seriennummer",
+              setze("Hersteller", t.hersteller) && "Hersteller", setze("Betriebsstunden", t.stunden) && "Betriebsstunden"].filter(Boolean);
+            st.textContent = gefunden.length ? `Aus „${f.name}“ übernommen (${t.quelle || "Dateiname"}): ${gefunden.join(", ")}. Bitte prüfen.` : `In „${f.name}“ wurden keine passenden Angaben gefunden.`;
+          } catch (e) { st.textContent = e.message; }
+          rdatei.value = "";
         };
         $("#g-text", s).onclick = async () => {
           let vorbelegt = "";

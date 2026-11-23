@@ -134,3 +134,14 @@ func TestReportJSONDateiname(t *testing.T) {
 	r, err := ReportsSuchen(l, d)
 	if err != nil || len(r) != 1 || len(r[0].Geraete) != 1 || r[0].Geraete[0].SN != "7080018" { t.Fatalf("%v %+v", err, r) }
 }
+
+func TestReportAuswerten(t *testing.T) {
+	a := ReportAuswerten("B_S_HF_Nr404_RRE140H___7080018.json", []byte(`[{"Id":"x","Value":"15000"}]`))
+	if a.Nummer != "404" || a.Typ != "RRE140H" || a.SN != "7080018" || a.Hersteller != "Toyota" { t.Errorf("%+v", a) }
+	b := ReportAuswerten("Report_RRE160H2_2026-11-03.txt", []byte("TruckCom Report\nSerial No.: 6874482\nHours: 581\n"))
+	if b.Typ != "RRE160H2" || b.SN != "6874482" || b.Stunden != "581" { t.Errorf("%+v", b) }
+	c := ReportAuswerten("x.txt", []byte("Serie='9FBE16T-10301' Modell='X265'"))
+	if c.SN != "10301" || c.Typ != "9FBE16T" { t.Errorf("%+v", c) }
+	d := ReportAuswerten("TruckReport_14215_9FBM35T.txt", nil)
+	if d.SN != "14215" || d.Typ != "9FBM35T" { t.Errorf("%+v", d) }
+}

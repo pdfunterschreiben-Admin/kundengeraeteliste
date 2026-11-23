@@ -130,6 +130,7 @@ func (a *App) Handler() http.Handler {
 	api("/api/uebernehmen", a.apiUebernehmen)
 	api("/api/protokoll", a.apiProtokoll)
 	api("/api/verlauf", a.apiVerlauf)
+	api("/api/reportgeraet", a.apiReportGeraet)
 	api("/api/typenschild", a.apiTypenschild)
 	api("/api/pruefen", a.apiListePruefen)
 	api("/api/sicherungsvorschau", a.apiSicherungsVorschau)
@@ -1343,4 +1344,41 @@ func (a *App) apiTypenschild(r *http.Request) (interface{}, error) {
 	t := TypenschildAuswerten(text)
 	t.Quelle = quelle
 	return t, nil
+}
+
+// Angaben fuer ein Geraet aus einem Truck-Report: hochgeladene Datei oder Report aus dem Report-Ordner
+func (a *App) apiReportGeraet(r *http.Request) (interface{}, error) {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		var in struct {
+			Liste string `json:"liste"`
+			Pfad  string `json:"pfad"`
+		}
+		if err := lesen(r, &in); err != nil {
+			return nil, err
+		}
+		a.sp.mu.Lock()
+		ordner := a.reportOrdner(a.sp.Holen(in.Liste))
+		a.sp.mu.Unlock()
+		if !imOrdner(in.Pfad, ordner) {
+			return nil, errors.New("Datei liegt nicht im Report-Ordner")
+		}
+		b, err := reportDateiLesen(in.Pfad)
+		if err != nil {
+			return nil, errors.New("Report kann nicht gelesen werden")
+		}
+		return ReportAuswerten(in.Pfad, b), nil
+	}
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		return nil, errors.New("Die Datei konnte nicht gelesen werden.")
+	}
+	f, h, err := r.FormFile("datei")
+	if err != nil {
+		return nil, errors.New("Keine Datei übergeben.")
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, 15<<20))
+	if err != nil {
+		return nil, err
+	}
+	return ReportAuswerten(h.Filename, b), nil
 }
