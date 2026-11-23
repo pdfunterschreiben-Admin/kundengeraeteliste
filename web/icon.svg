@@ -10,16 +10,31 @@
   <rect x="50" y="46" width="156" height="178" rx="18" fill="#fff"/>
   <rect x="94" y="28" width="68" height="34" rx="11" fill="#fff"/>
   <rect x="110" y="39" width="36" height="10" rx="5" fill="#c4101f"/>
-  <!-- Gabelstapler -->
+  <!-- Gabelstapler (Seitenansicht, fährt nach rechts) -->
   <g fill="#c4101f">
-    <rect x="72" y="118" width="70" height="30" rx="7"/>
-    <rect x="150" y="70" width="10" height="84" rx="2.5"/>
-    <rect x="150" y="144" width="42" height="9" rx="2.5"/>
-    <rect x="142" y="124" width="10" height="9" rx="1.5"/>
+    <!-- Mast mit Hubschlitten -->
+    <rect x="150" y="64" width="6" height="98" rx="2"/>
+    <rect x="159" y="64" width="6" height="98" rx="2"/>
+    <rect x="146" y="112" width="24" height="7" rx="2"/>
+    <!-- Gabelzinken -->
+    <path d="M148 150 h46 q4 0 4 4 q0 4 -4 4 h-46 z"/>
+    <!-- Palette und Last -->
+    <rect x="166" y="140" width="30" height="7" rx="1.5" opacity=".75"/>
+    <rect x="170" y="116" width="22" height="24" rx="3" opacity=".5"/>
+    <!-- Fahrzeugkörper mit Gegengewicht -->
+    <path d="M60 152 V124 q0-12 12-12 h14 v-4 h28 l12 18 v26 z"/>
+    <!-- Sitz -->
+    <rect x="90" y="92" width="7" height="20" rx="2"/>
+    <rect x="90" y="104" width="22" height="7" rx="2"/>
   </g>
-  <path d="M84 119 V88 q0-5 5-5 h29 q4 0 5 4 l10 32" fill="none" stroke="#c4101f" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
-  <circle cx="88" cy="153" r="12" fill="#c4101f"/><circle cx="88" cy="153" r="4.5" fill="#fff"/>
-  <circle cx="128" cy="153" r="12" fill="#c4101f"/><circle cx="128" cy="153" r="4.5" fill="#fff"/>
+  <!-- Fahrerschutzdach -->
+  <path d="M82 108 V78 H130 V100" fill="none" stroke="#c4101f" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="78" y="72" width="58" height="7" rx="3" fill="#c4101f"/>
+  <!-- Lenkrad -->
+  <path d="M122 110 L116 92" stroke="#c4101f" stroke-width="4" stroke-linecap="round"/>
+  <!-- Räder -->
+  <circle cx="84" cy="156" r="13" fill="#c4101f" stroke="#fff" stroke-width="3"/><circle cx="84" cy="156" r="4.5" fill="#fff"/>
+  <circle cx="128" cy="154" r="16" fill="#c4101f" stroke="#fff" stroke-width="3"/><circle cx="128" cy="154" r="5.5" fill="#fff"/>
   <!-- Listenzeilen -->
   <rect x="72" y="180" width="112" height="10" rx="5" fill="#c4101f" opacity=".85"/>
   <rect x="72" y="198" width="76" height="10" rx="5" fill="#c4101f" opacity=".4"/>
