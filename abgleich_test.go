@@ -123,3 +123,14 @@ func TestTypenschild(t *testing.T) {
 	if y.SN != "H2X393K01234" || y.Hersteller != "Linde" { t.Errorf("%+v", y) }
 	t.Logf("%+v", y)
 }
+
+func TestReportJSONDateiname(t *testing.T) {
+	d := t.TempDir()
+	os.WriteFile(d+"/B_S_HF_Nr404_RRE140H___7080018.json", []byte(`[{"Id":"x","Value":"15000"}]`), 0o644)
+	l := &Liste{Register: []*Register{{Name: "Herford", Spalten: SpaltenStandard, Zeilen: []*Zeile{
+		{ID: "a", Werte: []Wert{{T: "s", V: "404"}, {T: "s", V: "RRE140H"}, {T: "s", V: "7080018"}}},
+		{ID: "b", Werte: []Wert{{T: "s", V: "1"}, {T: "s", V: "X"}, {T: "s", V: "15000"}}},
+	}}}}
+	r, err := ReportsSuchen(l, d)
+	if err != nil || len(r) != 1 || len(r[0].Geraete) != 1 || r[0].Geraete[0].SN != "7080018" { t.Fatalf("%v %+v", err, r) }
+}

@@ -42,7 +42,7 @@ var (
 	cache   = map[string]inhaltCache{}
 )
 
-var inhaltEndungen = map[string]bool{".txt": true, ".pdf": true, ".htm": true, ".html": true, ".csv": true, ".xml": true, ".log": true, ".json": true}
+var inhaltEndungen = map[string]bool{".txt": true, ".pdf": true, ".htm": true, ".html": true, ".csv": true, ".xml": true, ".log": true}
 
 func dateiInhalt(p string, info fs.FileInfo) string {
 	ext := strings.ToLower(filepath.Ext(p))
