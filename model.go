@@ -46,6 +46,29 @@ type ProtokollEintrag struct {
 	Spalte string `json:"spalte"`
 	Alt    string `json:"alt"`
 	Neu    string `json:"neu"`
+	Typ    string `json:"typ,omitempty"`
+	Art    string `json:"art,omitempty"` // "lokal" = eigene Aenderung (nur fuer den Verlauf je Geraet)
+}
+
+const maxLokalProtokoll = 6000
+
+// Lokal merkt eine eigene Aenderung fuer den Verlauf des Geraets vor.
+func (l *Liste) Lokal(r *Register, z *Zeile, spalte, alt, neu string) {
+	l.Protokoll = append(l.Protokoll, ProtokollEintrag{Zeit: time.Now().Format("02.01.2006 15:04"), Von: BenutzerName() + " (ich)",
+		Nummer: r.Wert(z, spNummer).Text(), SN: r.Wert(z, spSN).Text(), Typ: r.Wert(z, "Typ").Text(), Spalte: spalte, Alt: alt, Neu: neu, Art: "lokal"})
+	if len(l.Protokoll) > maxLokalProtokoll {
+		// aelteste eigene Eintraege zuerst entfernen
+		ueber := len(l.Protokoll) - maxLokalProtokoll
+		var neuP []ProtokollEintrag
+		for _, e := range l.Protokoll {
+			if ueber > 0 && e.Art == "lokal" {
+				ueber--
+				continue
+			}
+			neuP = append(neuP, e)
+		}
+		l.Protokoll = neuP
+	}
 }
 
 type Liste struct {

@@ -165,7 +165,7 @@ func tabelleAbgleichen(l *Liste, lo *Register, src *Register, zIn map[string]flo
 							l.Zeit[kc] = tIn
 						}
 						l.Protokoll = append(l.Protokoll, ProtokollEintrag{Zeit: jetzt, Von: herkunft,
-							Nummer: lo.Wert(z, spNummer).Text(), SN: lo.Wert(z, spSN).Text(), Spalte: spText(lo.Spalten[k]),
+							Nummer: lo.Wert(z, spNummer).Text(), SN: lo.Wert(z, spSN).Text(), Typ: lo.Wert(z, "Typ").Text(), Spalte: spText(lo.Spalten[k]),
 							Alt: protokollWert(lo.Spalten[k], alt), Neu: protokollWert(lo.Spalten[k], v)})
 						e.Felder++
 						geaendert = true
@@ -220,7 +220,7 @@ func tabelleAbgleichen(l *Liste, lo *Register, src *Register, zIn map[string]flo
 					Nummer: lo.Wert(z, spNummer).Text(), Typ: lo.Wert(z, "Typ").Text(), SN: lo.Wert(z, spSN).Text(), Spalte: "(neues Gerät)"})
 			}
 			l.Protokoll = append(l.Protokoll, ProtokollEintrag{Zeit: jetzt, Von: herkunft,
-				Nummer: lo.Wert(z, spNummer).Text(), SN: lo.Wert(z, spSN).Text(), Spalte: spText("(neues Gerät)")})
+				Nummer: lo.Wert(z, spNummer).Text(), SN: lo.Wert(z, spSN).Text(), Typ: lo.Wert(z, "Typ").Text(), Spalte: spText("(neues Gerät)")})
 			e.Neu++
 		}
 	}

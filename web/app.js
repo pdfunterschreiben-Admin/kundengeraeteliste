@@ -589,11 +589,39 @@ function geraetMenue(anker, zid, spalte) {
   const sn = wert(reg, z, "Seriennummer").v || "";
   const e = [];
   e.push({ text: spalte != null ? `Kommentar zu „${reg.spalten[spalte]}“ …` : "Kommentar …", tun: () => notizBearbeiten(z, spalte != null ? reg.spalten[spalte] : reg.spalten[0]) });
+  e.push({ text: "Details und Verlauf …", tun: () => geraetDetails(z) });
   e.push({ text: "Truck-Reports zu diesem Gerät", tun: () => { Z.reg = "reports"; Z.reportFilter = sn; listeZeichnen($("#haupt")); } });
   if (l.register.length > 1) e.push({ text: "In anderes Register verschieben …", tun: () => geraetVerschieben(z) });
   e.push("-");
   e.push({ text: "Gerät löschen …", gefahr: true, tun: () => geraetLoeschen(z) });
   menue(anker, e);
+}
+
+async function geraetDetails(z) {
+  const l = Z.liste, reg = l.register[Z.reg], regIdx = Z.reg;
+  const name = [wert(reg, z, "Nummer").v, wert(reg, z, "Typ").v, "SN " + (wert(reg, z, "Seriennummer").v || "–")].filter(Boolean).join(" · ");
+  const sn = (wert(reg, z, "Seriennummer").v || "").replace(/\s/g, "").toUpperCase();
+  let verlauf = [];
+  try { verlauf = await api(`/api/verlauf?id=${l.id}`, { register: regIdx, zeile: z.id }); } catch (e) { return fehlerToast(e); }
+  const felder = reg.spalten.filter((s) => !istFormel(s)).map((s) => [s, anzeige(s, wert(reg, z, s))]).filter(([, t]) => t).map(([s, t]) => `<tr><td style="color:var(--leise)">${esc(s)}</td><td>${esc(t)}</td></tr>`).join("");
+  const verlaufHTML = verlauf.length ? `<table class="einfach vorschau"><thead><tr><th>Zeitpunkt</th><th>Von</th><th>Feld</th><th>Bisher</th><th>Neu</th></tr></thead><tbody>
+    ${verlauf.map((x) => `<tr><td>${esc(x.zeit)}</td><td>${esc(x.von)}</td><td>${esc(x.spalte)}</td><td class="alt">${esc(x.alt)}</td><td class="neu">${esc(x.neu)}</td></tr>`).join("")}</tbody></table>`
+    : "<p>Noch keine Änderungen aufgezeichnet. Ab jetzt werden eigene und vom Kollegen übernommene Änderungen hier gesammelt.</p>";
+  dialog({ titel: name, breit: true, knoepfe: [{ text: "Schließen", wert: null, art: "primaer" }],
+    html: `<h3 style="font-size:14px;margin:8px 0 6px">Letzte Truck-Reports</h3><div id="d-reports"><span class="status-punkt"><span class="dreh"></span>werden gesucht …</span></div>
+      <h3 style="font-size:14px;margin:16px 0 6px">Verlauf der Änderungen</h3>${verlaufHTML}
+      <h3 style="font-size:14px;margin:16px 0 6px">Aktuelle Angaben</h3><table class="einfach"><tbody>${felder}</tbody></table>`,
+    beimOeffnen: async (s) => {
+      const ziel = $("#d-reports", s);
+      try {
+        const j = Z.reportsJ ? Z.reportsJ : await api(`/api/reports?id=${l.id}`);
+        if (!j.ordner) { ziel.innerHTML = "<p>Es ist noch kein Report-Ordner gewählt (Reiter „Truck-Reports“).</p>"; return; }
+        const mit = j.reports.filter((r) => r.geraete.some((g) => (g.sn || "").replace(/\s/g, "").toUpperCase() === sn)).slice(0, 5);
+        if (!mit.length) { ziel.innerHTML = "<p>Zu dieser Seriennummer wurde im Report-Ordner nichts gefunden.</p>"; return; }
+        ziel.innerHTML = `<table class="einfach"><tbody>${mit.map((r, i) => `<tr><td>${esc(r.datum)}</td><td>${esc(r.name)}</td><td style="text-align:right"><button class="knopf" data-o="${i}">Öffnen</button></td></tr>`).join("")}</tbody></table>`;
+        ziel.onclick = (e) => { const b = e.target.closest("button[data-o]"); if (b) reportAktion("oeffnen", [mit[+b.dataset.o].pfad]); };
+      } catch (e) { ziel.innerHTML = `<p>${esc(e.message)}</p>`; }
+    } });
 }
 
 async function notizBearbeiten(z, spalte) {
@@ -640,10 +668,29 @@ async function geraetHinzufuegen() {
   const l = Z.liste, reg = l.register[Z.reg];
   const felder = reg.spalten.filter((s) => !istFormel(s));
   const html = `<p>Pflicht ist nur die Seriennummer – daran wird das Gerät beim Abgleich erkannt. Datumsfelder als MM/JJJJ eingeben.</p>
+    <div class="foto-zeile"><button type="button" class="knopf" id="g-foto">Foto vom Typenschild …</button><input type="file" id="g-foto-datei" accept="image/*" hidden>
+      <span id="g-foto-status" style="color:var(--leise);font-size:12.5px">Typ und Seriennummer werden aus dem Foto vorbelegt – bitte kurz prüfen.</span></div>
     <div class="zeile2">${felder.map((s) => `<div ${zellKlasse(s) === "breit" ? 'style="grid-column:1/-1"' : ""}><label>${esc(s)}${gleich(s, "Seriennummer") ? " *" : ""}</label>
       ${zellKlasse(s) === "breit" ? `<textarea class="feld" data-s="${esc(s)}" rows="2"></textarea>` : `<input class="feld" data-s="${esc(s)}" ${istDatumSpalte(s) ? 'placeholder="MM/JJJJ"' : ""}>`}</div>`).join("")}</div>`;
   while (true) {
     const werte = await dialog({ titel: "Gerät hinzufügen – " + reg.name, html, breit: true,
+      beimOeffnen: (s) => {
+        const st = $("#g-foto-status", s), datei = $("#g-foto-datei", s);
+        $("#g-foto", s).onclick = () => datei.click();
+        datei.onchange = async () => {
+          const f = datei.files[0]; if (!f) return;
+          st.innerHTML = '<span class="status-punkt"><span class="dreh"></span>Text wird erkannt …</span>';
+          try {
+            const fd = new FormData(); fd.append("bild", f);
+            const t = await api("/api/typenschild", fd);
+            const setze = (sp, v) => { if (!v) return false; const x = [...$$("[data-s]", s)].find((e) => gleich(e.dataset.s, sp)); if (x) { x.value = v; return true; } return false; };
+            const gefunden = [setze("Typ", t.typ) && "Typ", setze("Seriennummer", t.sn) && "Seriennummer", setze("Hersteller", t.hersteller) && "Hersteller"].filter(Boolean);
+            st.innerHTML = (gefunden.length ? `Übernommen: ${gefunden.join(", ")}. Bitte mit dem Typenschild vergleichen.` : "Es wurde nichts Passendes erkannt – bitte von Hand eintragen.")
+              + `<details style="margin-top:4px"><summary>Erkannter Text</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(t.text)}</pre></details>`;
+          } catch (e) { st.textContent = e.message; }
+          datei.value = "";
+        };
+      },
       knoepfe: [{ text: "Abbrechen", wert: null }, { text: "Gerät anlegen", art: "primaer", wert: (s) => {
         const w = {}; $$("[data-s]", s).forEach((x) => { if (x.value.trim()) w[x.dataset.s] = x.value; });
         if (!w["Seriennummer"] && !Object.keys(w).some((k) => gleich(k, "Seriennummer"))) { toast("Bitte die Seriennummer eintragen.", "fehler"); return undefined; }
@@ -670,6 +717,7 @@ function mehrMenue(anker) {
     { text: "Drucken / als PDF speichern", tun: () => window.print() },
     "-",
     { text: "Sync-Protokoll", tun: protokollZeigen },
+    { text: "Liste prüfen …", tun: listePruefen },
     { text: "Sicherungen …", tun: sicherungenZeigen },
     "-",
     { text: "Liste löschen …", gefahr: true, tun: listeLoeschen },
@@ -690,6 +738,27 @@ function registerMenue(anker, i) {
       try { await api(`/api/register?id=${l.id}`, { aktion: "loeschen", index: i }); await listeOeffnen(l.id, 0); await listenLaden(); } catch (e) { fehlerToast(e); }
     } },
   ]);
+}
+
+async function listePruefen() {
+  const l = Z.liste;
+  let b = [];
+  try { b = await api(`/api/pruefen?id=${l.id}`); } catch (e) { return fehlerToast(e); }
+  const fehler = b.filter((x) => x.schwere === "fehler"), hinweise = b.filter((x) => x.schwere !== "fehler");
+  const tab = (liste) => `<table class="einfach vorschau"><thead><tr><th>Gerät</th><th>Befund</th><th></th></tr></thead><tbody>
+    ${liste.map((x, i) => `<tr><td>${esc([x.nummer, x.typ, x.sn && "SN " + x.sn].filter(Boolean).join(" · ") || "(leere Zeile)")}</td><td>${esc(x.text)}</td><td style="text-align:right"><button class="knopf" data-z="${esc(x.register + "|" + x.zeile)}">Anzeigen</button></td></tr>`).join("")}</tbody></table>`;
+  const w = await dialog({ titel: "Liste prüfen", breit: true, knoepfe: [{ text: "Schließen", wert: null, art: "primaer" }],
+    html: b.length ? `<p>${fehler.length} Fehler und ${hinweise.length} Hinweis(e) in „${esc(l.titel)}“.</p>
+      ${fehler.length ? `<h3 style="font-size:14px;margin:10px 0 6px;color:var(--rot-marke)">Bitte korrigieren</h3>${tab(fehler)}` : ""}
+      ${hinweise.length ? `<h3 style="font-size:14px;margin:14px 0 6px">Zur Kontrolle</h3>${tab(hinweise)}` : ""}`
+      : `<p>Keine Auffälligkeiten gefunden: keine doppelten Geräte, alle Seriennummern und Typen eingetragen, keine UVV-Daten in der Zukunft.</p>`,
+    beimOeffnen: (d) => d.addEventListener("click", (e) => {
+      const k = e.target.closest("button[data-z]"); if (!k) return;
+      const [ri, zid] = k.dataset.z.split("|");
+      d.querySelector("footer .primaer").click();
+      Z.filter = "alle"; Z.suche = "";
+      listeOeffnen(l.id, +ri, zid);
+    }) });
 }
 
 async function registerNeu() {
@@ -815,7 +884,14 @@ async function sicherungenZeigen() {
       beimOeffnen: (d) => d.addEventListener("click", async (e) => {
         const b = e.target.closest("button[data-i]"); if (!b) return;
         const x = s[+b.dataset.i];
-        if (!(await frage("Sicherung wiederherstellen?", `Die Liste wird auf den Stand vom ${new Date(x.zeit).toLocaleString("de-DE")} zurückgesetzt. Der aktuelle Stand wird vorher selbst gesichert.`, "Wiederherstellen"))) return;
+        let v = null;
+        try { v = await api(`/api/sicherungsvorschau?id=${l.id}&datei=${encodeURIComponent(x.datei)}`); } catch (er) { return fehlerToast(er); }
+        const zeilen = v.zurueck || v.weg || v.felder
+          ? `<ul><li>${v.zurueck} Gerät(e) kommen wieder zurück</li><li>${v.weg} Gerät(e), die es nur im aktuellen Stand gibt, verschwinden</li><li>${v.felder} Feld(er) bekommen wieder den alten Wert</li></ul>${v.beispiele.length ? `<p style="font-size:12.5px;white-space:pre-wrap">Beispiele (jetzt → Sicherung):\n${v.beispiele.map(esc).join("\n")}</p>` : ""}`
+          : "<p>Die Sicherung entspricht dem aktuellen Stand – es würde sich nichts ändern.</p>";
+        const ok = await dialog({ titel: "Sicherung wiederherstellen?", html: `<p>Die Liste wird auf den Stand vom ${new Date(x.zeit).toLocaleString("de-DE")} zurückgesetzt. Der aktuelle Stand wird vorher selbst gesichert.</p>${zeilen}`,
+          knoepfe: [{ text: "Abbrechen", wert: false }, { text: "Wiederherstellen", wert: true, art: "primaer" }] });
+        if (!ok) return;
         try { await api("/api/wiederherstellen", { id: l.id, datei: x.datei }); d.remove(); await listeOeffnen(l.id, 0); await listenLaden(); toast("Sicherung wiederhergestellt.", "gut"); }
         catch (er) { fehlerToast(er); }
       }) });

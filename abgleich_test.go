@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 func claas(t *testing.T) *Liste {
@@ -100,4 +101,25 @@ func TestAbgleichAuswahl(t *testing.T) {
 func TestAdressen(t *testing.T) {
 	a := Adressen("a@x.de; b@x.de,\nA@x.de ")
 	if len(a) != 2 || a[1] != "b@x.de" { t.Errorf("%v", a) }
+}
+
+func TestPruefungUndVorschau(t *testing.T) {
+	l := claas(t)
+	b := ListePruefen(l, time.Now())
+	for _, x := range b { t.Logf("%s %s %s: %s", x.Schwere, x.SN, x.Typ, x.Text) }
+	if len(b) == 0 { t.Errorf("Claas-Liste hat doppelte SN, erwartet Hinweise") }
+	k, _ := kopieren(l)
+	r := k.Register[0]
+	r.Zeilen = r.Zeilen[1:]
+	r.Zeilen[0].Werte[r.Spalte(spStunden)] = Wert{T: "s", V: "1h"}
+	v := Unterschiede(l, k)
+	if v.Zurueck != 1 || v.Felder < 1 { t.Errorf("Vorschau %+v", v) }
+}
+
+func TestTypenschild(t *testing.T) {
+	x := TypenschildAuswerten("TOYOTA Material Handling\nTyp / Type: 8FBMT30\nSerien-Nr. / Serial No.: 6905790\nBaujahr / Year: 2019\nNennlast 3000 kg")
+	if x.Typ != "8FBMT30" || x.SN != "6905790" || x.Hersteller != "Toyota" || x.Baujahr != "2019" { t.Errorf("%+v", x) }
+	y := TypenschildAuswerten("Linde\nType H25D-01\nSerial no. H2X393K01234\nYear 2015")
+	if y.SN != "H2X393K01234" || y.Hersteller != "Linde" { t.Errorf("%+v", y) }
+	t.Logf("%+v", y)
 }

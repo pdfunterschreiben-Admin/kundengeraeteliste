@@ -129,6 +129,10 @@ func (a *App) Handler() http.Handler {
 	api("/api/empfangen", a.apiEmpfangen)
 	api("/api/uebernehmen", a.apiUebernehmen)
 	api("/api/protokoll", a.apiProtokoll)
+	api("/api/verlauf", a.apiVerlauf)
+	api("/api/typenschild", a.apiTypenschild)
+	api("/api/pruefen", a.apiListePruefen)
+	api("/api/sicherungsvorschau", a.apiSicherungsVorschau)
 	api("/api/sicherungen", a.apiSicherungen)
 	api("/api/wiederherstellen", a.apiWiederherstellen)
 	api("/api/sicherungsordner", func(r *http.Request) (interface{}, error) {
@@ -402,7 +406,11 @@ func (a *App) apiZelle(r *http.Request) (interface{}, error) {
 		}
 	}
 	if z.Werte[in.Spalte].Text() != neu.Text() || z.Werte[in.Spalte].T != neu.T {
+		alt := protokollWert(sp, z.Werte[in.Spalte])
 		z.Werte[in.Spalte] = neu
+		if alt != protokollWert(sp, neu) {
+			l.Lokal(reg, z, sp, alt, protokollWert(sp, neu))
+		}
 		ts := Jetzt()
 		if gleich(sp, spSN) {
 			// neue Seriennummer = fuer den Kollegen ein neues Geraet: alle Felder mit Zeit versehen
@@ -495,6 +503,7 @@ func (a *App) apiGeraet(r *http.Request) (interface{}, error) {
 			return nil, fmt.Errorf("Ein Gerät mit Seriennummer %s und gleichem Typ gibt es in dieser Liste schon (Register %s). Bei gleicher Seriennummer muss sich der Typ unterscheiden.", sn.V, x)
 		}
 		reg.Zeilen = append(reg.Zeilen, z)
+		l.Lokal(reg, z, "(Gerät hinzugefügt)", "", "")
 		ts := Jetzt()
 		for i, s := range reg.Spalten {
 			if !IstFormelSpalte(s) && !z.Werte[i].Leer() {
@@ -504,11 +513,12 @@ func (a *App) apiGeraet(r *http.Request) (interface{}, error) {
 		l.SyncOffen = true
 		return map[string]interface{}{"zeile": z, "info": info(l)}, a.sp.Speichern(l)
 	case "loeschen":
-		_, i := zeileSuchen(reg, in.Zeile)
+		z0, i := zeileSuchen(reg, in.Zeile)
 		if i < 0 {
 			return nil, errors.New("Gerät nicht gefunden")
 		}
 		a.sp.SicherungAnlegen(l, "vor dem Löschen eines Geräts")
+		l.Lokal(reg, z0, "(Gerät gelöscht)", "", "")
 		reg.Zeilen = append(reg.Zeilen[:i], reg.Zeilen[i+1:]...)
 		return map[string]interface{}{"info": info(l)}, a.sp.Speichern(l)
 	case "verschieben":
@@ -1040,9 +1050,45 @@ func (a *App) apiProtokoll(r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ProtokollEintrag, len(l.Protokoll))
-	for i := range l.Protokoll {
-		out[len(out)-1-i] = l.Protokoll[i]
+	out := []ProtokollEintrag{}
+	for i := len(l.Protokoll) - 1; i >= 0; i-- {
+		if l.Protokoll[i].Art != "lokal" {
+			out = append(out, l.Protokoll[i])
+		}
+	}
+	return out, nil
+}
+
+// Verlauf eines Geraets: eigene und uebernommene Aenderungen, neueste zuerst
+func (a *App) apiVerlauf(r *http.Request) (interface{}, error) {
+	var in struct {
+		Register int    `json:"register"`
+		Zeile    string `json:"zeile"`
+	}
+	if err := lesen(r, &in); err != nil {
+		return nil, err
+	}
+	a.sp.mu.Lock()
+	defer a.sp.mu.Unlock()
+	l, err := a.liste(r)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := a.register(l, in.Register)
+	if err != nil {
+		return nil, err
+	}
+	z, _ := zeileSuchen(reg, in.Zeile)
+	if z == nil {
+		return nil, errors.New("Gerät nicht gefunden")
+	}
+	sn, typ := reg.Wert(z, spSN).Text(), reg.Wert(z, "Typ").Text()
+	out := []ProtokollEintrag{}
+	for i := len(l.Protokoll) - 1; i >= 0 && len(out) < 300; i-- {
+		e := l.Protokoll[i]
+		if e.SN == sn && sn != "" && (e.Typ == "" || typ == "" || e.Typ == typ) {
+			out = append(out, e)
+		}
 	}
 	return out, nil
 }
@@ -1226,4 +1272,63 @@ func (a *App) apiUpdate(r *http.Request) (interface{}, error) {
 		return map[string]string{"text": "Update installiert – das Programm startet neu."}, nil
 	}
 	return AktuellesUpdate(), nil
+}
+
+func (a *App) apiSicherungsVorschau(r *http.Request) (interface{}, error) {
+	a.sp.mu.Lock()
+	defer a.sp.mu.Unlock()
+	return a.sp.SicherungVorschau(r.URL.Query().Get("id"), r.URL.Query().Get("datei"))
+}
+
+func (a *App) apiListePruefen(r *http.Request) (interface{}, error) {
+	a.sp.mu.Lock()
+	defer a.sp.mu.Unlock()
+	l, err := a.liste(r)
+	if err != nil {
+		return nil, err
+	}
+	b := ListePruefen(l, time.Now())
+	if b == nil {
+		b = []Befund{}
+	}
+	return b, nil
+}
+
+// Foto eines Typenschilds: Text erkennen und Typ/Seriennummer herausziehen
+func (a *App) apiTypenschild(r *http.Request) (interface{}, error) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		return nil, errors.New("Das Foto konnte nicht gelesen werden.")
+	}
+	f, h, err := r.FormFile("bild")
+	if err != nil {
+		return nil, errors.New("Kein Foto übergeben.")
+	}
+	defer f.Close()
+	tmp, err := os.MkdirTemp("", "kgl-ocr")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmp)
+	ext := strings.ToLower(filepath.Ext(h.Filename))
+	if ext == "" || len(ext) > 6 {
+		ext = ".jpg"
+	}
+	pfad := filepath.Join(tmp, "foto"+ext)
+	out, err := os.Create(pfad)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(out, io.LimitReader(f, 30<<20)); err != nil {
+		out.Close()
+		return nil, err
+	}
+	out.Close()
+	text, err := TextErkennen(pfad)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil, errors.New("Im Foto wurde kein Text erkannt. Bitte näher, gerade und bei gutem Licht fotografieren.")
+	}
+	return TypenschildAuswerten(text), nil
 }

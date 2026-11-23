@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -463,4 +464,43 @@ func SymbolAktualisieren() {
 		return
 	}
 	_ = Verknuepfungen(exe)
+}
+
+const ocrSkript = `param([string]$Pfad)
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+$null = [Windows.Storage.StorageFile,Windows.Storage,ContentType=WindowsRuntime]
+$null = [Windows.Media.Ocr.OcrEngine,Windows.Foundation,ContentType=WindowsRuntime]
+$null = [Windows.Graphics.Imaging.BitmapDecoder,Windows.Graphics,ContentType=WindowsRuntime]
+$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation` + "`" + `1' })[0]
+function Warten($op, $typ) { $t = $asTask.MakeGenericMethod($typ).Invoke($null, @($op)); $null = $t.Wait(-1); $t.Result }
+$datei = Warten ([Windows.Storage.StorageFile]::GetFileFromPathAsync($Pfad)) ([Windows.Storage.StorageFile])
+$strom = Warten ($datei.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
+$dec = Warten ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($strom)) ([Windows.Graphics.Imaging.BitmapDecoder])
+$bmp = Warten ($dec.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+$motor = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+if (-not $motor) { throw 'Keine Texterkennung (OCR) in Windows verfügbar.' }
+$erg = Warten ($motor.RecognizeAsync($bmp)) ([Windows.Media.Ocr.OcrResult])
+foreach ($z in $erg.Lines) { $z.Text }
+`
+
+// TextErkennen liest den Text aus einem Foto mit der Windows-Texterkennung.
+func TextErkennen(bild string) (string, error) {
+	skript := filepath.Join(filepath.Dir(bild), "ocr.ps1")
+	if err := os.WriteFile(skript, append([]byte{0xEF, 0xBB, 0xBF}, []byte(ocrSkript)...), 0o600); err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := versteckt(exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", skript, "-Pfad", bild))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if len(msg) > 300 {
+			msg = msg[:300]
+		}
+		return "", errors.New("Die Texterkennung hat nicht funktioniert: " + msg)
+	}
+	return strings.TrimSpace(string(out)), nil
 }

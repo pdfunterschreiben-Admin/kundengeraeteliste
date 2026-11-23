@@ -51,3 +51,4 @@ func Verknuepfungen(exe string) error                             { return nil }
 func NeuStarten(exe string, args ...string) error                 { return exec.Command(exe, args...).Start() }
 
 func SymbolAktualisieren() {}
+func TextErkennen(bild string) (string, error) { return "", errNurWindows }

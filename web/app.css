@@ -279,3 +279,5 @@ table.vorschau { width: 100%; font-size: 13px; }
 table.vorschau td, table.vorschau th { padding: 6px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--linie); }
 table.vorschau td.alt { color: var(--leise); text-decoration: line-through; text-decoration-color: rgba(200,16,46,.5); }
 table.vorschau td.neu { font-weight: 600; color: #1d6b3a; }
+
+.foto-zeile { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 10px; }
