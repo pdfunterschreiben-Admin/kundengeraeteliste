@@ -1296,6 +1296,15 @@ func (a *App) apiListePruefen(r *http.Request) (interface{}, error) {
 
 // Foto eines Typenschilds: Text erkennen und Typ/Seriennummer herausziehen
 func (a *App) apiTypenschild(r *http.Request) (interface{}, error) {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		var in struct {
+			Text string `json:"text"`
+		}
+		if err := lesen(r, &in); err != nil {
+			return nil, err
+		}
+		return TypenschildAuswerten(in.Text), nil
+	}
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		return nil, errors.New("Das Foto konnte nicht gelesen werden.")
 	}

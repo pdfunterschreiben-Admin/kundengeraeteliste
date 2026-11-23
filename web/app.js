@@ -668,7 +668,7 @@ async function geraetHinzufuegen() {
   const l = Z.liste, reg = l.register[Z.reg];
   const felder = reg.spalten.filter((s) => !istFormel(s));
   const html = `<p>Pflicht ist nur die Seriennummer – daran wird das Gerät beim Abgleich erkannt. Datumsfelder als MM/JJJJ eingeben.</p>
-    <div class="foto-zeile"><button type="button" class="knopf" id="g-foto">Foto vom Typenschild …</button><input type="file" id="g-foto-datei" accept="image/*" hidden>
+    <div class="foto-zeile"><button type="button" class="knopf" id="g-foto">Foto vom Typenschild …</button><button type="button" class="knopf" id="g-text">Erkannten Text einfügen …</button><input type="file" id="g-foto-datei" accept="image/*" hidden>
       <span id="g-foto-status" style="color:var(--leise);font-size:12.5px">Typ und Seriennummer werden aus dem Foto vorbelegt – bitte kurz prüfen.</span></div>
     <div class="zeile2">${felder.map((s) => `<div ${zellKlasse(s) === "breit" ? 'style="grid-column:1/-1"' : ""}><label>${esc(s)}${gleich(s, "Seriennummer") ? " *" : ""}</label>
       ${zellKlasse(s) === "breit" ? `<textarea class="feld" data-s="${esc(s)}" rows="2"></textarea>` : `<input class="feld" data-s="${esc(s)}" ${istDatumSpalte(s) ? 'placeholder="MM/JJJJ"' : ""}>`}</div>`).join("")}</div>`;
@@ -677,6 +677,20 @@ async function geraetHinzufuegen() {
       beimOeffnen: (s) => {
         const st = $("#g-foto-status", s), datei = $("#g-foto-datei", s);
         $("#g-foto", s).onclick = () => datei.click();
+        const uebernehmen = (t) => {
+          const setze = (sp, v) => { if (!v) return false; const x = [...$$("[data-s]", s)].find((e) => gleich(e.dataset.s, sp)); if (x) { x.value = v; return true; } return false; };
+          const gefunden = [setze("Typ", t.typ) && "Typ", setze("Seriennummer", t.sn) && "Seriennummer", setze("Hersteller", t.hersteller) && "Hersteller"].filter(Boolean);
+          st.innerHTML = (gefunden.length ? `Übernommen: ${gefunden.join(", ")}. Bitte mit dem Typenschild vergleichen.` : "Es wurde nichts Passendes erkannt – bitte von Hand eintragen.")
+            + `<details style="margin-top:4px"><summary>Erkannter Text</summary><pre style="white-space:pre-wrap;margin:4px 0">${esc(t.text)}</pre></details>`;
+        };
+        $("#g-text", s).onclick = async () => {
+          let vorbelegt = "";
+          try { vorbelegt = await navigator.clipboard.readText(); } catch (e) { /* kein Zugriff */ }
+          const txt = await dialog({ titel: "Erkannten Text einfügen", html: `<p>Text aus Google Lens (Handy: Foto vom Typenschild → „Text“ → „Kopieren“, dann hier mit Strg+V einfügen).</p><textarea class="feld" id="t-ein" rows="8">${esc(vorbelegt)}</textarea>`,
+            knoepfe: [{ text: "Abbrechen", wert: null }, { text: "Auswerten", art: "primaer", wert: (d) => $("#t-ein", d).value }] });
+          if (!txt || !txt.trim()) return;
+          try { uebernehmen(await api("/api/typenschild", { text: txt })); } catch (e) { st.textContent = e.message; }
+        };
         datei.onchange = async () => {
           const f = datei.files[0]; if (!f) return;
           st.innerHTML = '<span class="status-punkt"><span class="dreh"></span>Text wird erkannt …</span>';
