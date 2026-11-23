@@ -66,20 +66,37 @@ func neuer(a, b string) bool {
 
 func UpdatePruefen(test bool) UpdateInfo {
 	info := UpdateInfo{Geprueft: time.Now().Format("02.01.2006 15:04")}
-	cl := &http.Client{Timeout: 20 * time.Second}
-	req, _ := http.NewRequest("GET", "https://api.github.com/repos/"+UpdateRepo+"/releases?per_page=15", nil)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "Kundengeraeteliste/"+Version)
-	resp, err := cl.Do(req)
-	if err != nil {
-		info.Fehler = "Keine Verbindung zum Update-Server"
+	cl := &http.Client{Timeout: 25 * time.Second}
+	var resp *http.Response
+	var err error
+	for versuch := 0; versuch < 3; versuch++ {
+		if versuch > 0 {
+			time.Sleep(time.Duration(versuch*3) * time.Second)
+		}
+		req, _ := http.NewRequest("GET", "https://api.github.com/repos/"+UpdateRepo+"/releases?per_page=15", nil)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("User-Agent", "Kundengeraeteliste/"+Version)
+		resp, err = cl.Do(req)
+		if err == nil && resp.StatusCode == 200 {
+			break
+		}
+		if err == nil {
+			resp.Body.Close()
+		}
+	}
+	if err != nil || resp.StatusCode != 200 {
+		// Ersatzweg ohne GitHub-API (manche Firmen-Proxys blockieren oder verzögern api.github.com)
+		if i, ok := updateUeberWebseite(test); ok {
+			return merken(i)
+		}
+		if err != nil {
+			info.Fehler = "Keine Verbindung zum Update-Server"
+		} else {
+			info.Fehler = fmt.Sprintf("Update-Server antwortet mit %d – meist eine Störung bei GitHub oder eine Sperre im Firmennetz. Es wird später automatisch erneut versucht.", resp.StatusCode)
+		}
 		return merken(info)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		info.Fehler = fmt.Sprintf("Update-Server antwortet mit %d", resp.StatusCode)
-		return merken(info)
-	}
 	var rel []struct {
 		Tag    string `json:"tag_name"`
 		Body   string `json:"body"`
@@ -180,4 +197,28 @@ func AltesUpdateAufraeumen() {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
+}
+
+// Ersatzweg: github.com/<repo>/releases/latest leitet auf die neueste (stabile) Version um.
+func updateUeberWebseite(test bool) (UpdateInfo, bool) {
+	info := UpdateInfo{Geprueft: time.Now().Format("02.01.2006 15:04")}
+	cl := &http.Client{Timeout: 25 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	req, _ := http.NewRequest("HEAD", "https://github.com/"+UpdateRepo+"/releases/latest", nil)
+	req.Header.Set("User-Agent", "Kundengeraeteliste/"+Version)
+	resp, err := cl.Do(req)
+	if err != nil {
+		return info, false
+	}
+	resp.Body.Close()
+	ort := resp.Header.Get("Location")
+	i := strings.LastIndex(ort, "/tag/")
+	if resp.StatusCode/100 != 3 || i < 0 {
+		return info, false
+	}
+	tag := ort[i+5:]
+	if neuer(tag, Version) {
+		info.Verfuegbar, info.Version = true, strings.TrimPrefix(tag, "v")
+		info.url = "https://github.com/" + UpdateRepo + "/releases/download/" + tag + "/" + UpdateDatei
+	}
+	return info, true
 }
