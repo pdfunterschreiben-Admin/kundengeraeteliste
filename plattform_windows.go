@@ -26,6 +26,7 @@ var (
 	procGlobalLock       = kernel32.NewProc("GlobalLock")
 	procGlobalUnlock     = kernel32.NewProc("GlobalUnlock")
 	procCreateMutexW     = kernel32.NewProc("CreateMutexW")
+	procGetForeground    = user32.NewProc("GetForegroundWindow")
 )
 
 func Meldung(titel, text string, frage bool) bool {
@@ -112,7 +113,9 @@ func OrdnerWaehlen(titel string) (string, error) {
 			return err
 		}
 		defer sh.Release()
-		f, err := sh.Obj("BrowseForFolder", 0, titel, 0x0041|0x0010, 0) // neuer Dialog, Eingabefeld
+		// Programmfenster als Besitzer, damit der Dialog davor erscheint (nicht dahinter)
+		owner, _, _ := procGetForeground.Call()
+		f, err := sh.Obj("BrowseForFolder", int(int32(owner)), titel, 0x0041|0x0010, 0) // neuer Dialog, Eingabefeld
 		if err != nil {
 			return nil // abgebrochen
 		}
