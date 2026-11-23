@@ -19,8 +19,8 @@ Nachfolger der Excel-Makro-Listen (`Geraeteliste_*.xlsm`), kompatibel zum Mail-A
 `rsrc_windows_amd64.syso` enthält Programmsymbol und Manifest (neu erzeugen: `build/icon_render.py`, `build/syso.py`).
 
 ## Update veröffentlichen
-Version taggen und pushen, z. B. `git tag v1.0.1 && git push --tags`. GitHub Actions baut die .exe
-und legt das Release an. Tags mit Bindestrich (`v1.1.0-test1`) sind Testversionen.
+Neue Versionsnummer in die Datei `VERSION` schreiben und auf `main` pushen. GitHub Actions baut die .exe
+und legt das Release `vX.Y.Z` an. Mit Bindestrich (`1.1.0-test1`) ist es eine Testversion.
 
 ## Entwickeln unter Linux
     KGL_DATEN=/tmp/kgl KGL_KEIN_FENSTER=1 go run .
